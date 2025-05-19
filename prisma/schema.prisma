@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String    @unique
+  password      String?
+  phone         String?
+  avatar        String?
+  role          Role      @default(USER)
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  bids          Bid[]
+  auctions      Auction[] @relation("SellerAuctions")
+  watchlist     Watchlist[]
+  notifications Notification[]
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Auction {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  description      String        @db.String
+  images           String[]
+  startingBid      Float
+  currentBid       Float
+  incrementAmount  Float         @default(100)
+  location         String
+  category         String
+  featured         Boolean       @default(false)
+  status           AuctionStatus @default(UPCOMING)
+  startDate        DateTime
+  endDate          DateTime
+  propertyDetails  Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  sellerId         String        @db.ObjectId
+  seller           User          @relation("SellerAuctions", fields: [sellerId], references: [id])
+  bids             Bid[]
+  watchlist        Watchlist[]
+}
+
+model Bid {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  amount    Float
+  createdAt DateTime @default(now())
+  auctionId String   @db.ObjectId
+  auction   Auction  @relation(fields: [auctionId], references: [id])
+  bidderId  String   @db.ObjectId
+  bidder    User     @relation(fields: [bidderId], references: [id])
+}
+
+model Watchlist {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  auctionId String   @db.ObjectId
+  auction   Auction  @relation(fields: [auctionId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, auctionId])
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  type      String
+  createdAt DateTime @default(now())
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AuctionStatus {
+  UPCOMING
+  LIVE
+  ENDED
+  CANCELLED
+}
