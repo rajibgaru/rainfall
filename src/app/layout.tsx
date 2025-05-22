@@ -7,7 +7,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: '$ Houses Auction Depot - Real Estate Auction Platform',
+  title: 'BargainAuctions.com - Real Estate Auction Platform',
   description: 'Find unbeatable deals and maximize your profits with our cutting-edge auction platform.',
 };
 

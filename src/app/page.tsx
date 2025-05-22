@@ -146,7 +146,7 @@ export default function Home() {
               <div className="md:w-2/3">
                 <div className="relative">
                   <p className="text-gray-700 text-lg relative z-10 italic">
-                    "$ Houses Auction Depot's platform made property acquisition incredibly streamlined. I was able to find and bid on multiple properties from my home office, saving me countless hours of travel and paperwork."
+                    "BargainAuctions.com platform made property acquisition incredibly streamlined. I was able to find and bid on multiple properties from my home office, saving me countless hours of travel and paperwork."
                   </p>
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function Home() {
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="md:w-2/3 mb-8 md:mb-0">
-              <h2 className="text-3xl font-bold mb-4">Get the $ Houses Auction Depot Mobile App</h2>
+              <h2 className="text-3xl font-bold mb-4">Get the BargainAuctions.com Mobile App</h2>
               <p className="text-blue-100 text-lg mb-6">
                 Never miss an auction opportunity. Bid on properties, receive notifications, 
                 and manage your watchlist from anywhere.

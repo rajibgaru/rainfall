@@ -1,11 +1,13 @@
+// src/app/dashboard/layout.tsx
 'use client'
 
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Home, Clock, Heart, Award, Settings, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
+import DashboardNav from '@/components/dashboard/DashboardNav';
 
 export default function DashboardLayout({ children }) {
   const { data: session, status } = useSession();
@@ -25,33 +27,16 @@ export default function DashboardLayout({ children }) {
     return null;
   }
 
-  const navItems = [
-    { 
-      label: 'Dashboard', 
-      icon: <Home size={20} />, 
-      href: '/dashboard' 
-    },
-    { 
-      label: 'My Bids', 
-      icon: <Clock size={20} />, 
-      href: '/dashboard/bids' 
-    },
-    { 
-      label: 'Watchlist', 
-      icon: <Heart size={20} />, 
-      href: '/dashboard/watchlist' 
-    },
-    { 
-      label: 'Won Auctions', 
-      icon: <Award size={20} />, 
-      href: '/dashboard/won-auctions' 
-    },
-    { 
-      label: 'Settings', 
-      icon: <Settings size={20} />, 
-      href: '/dashboard/settings' 
-    },
-  ];
+  // Check user role and redirect to appropriate dashboard
+  if (session?.user?.role === 'AGENT' && router.pathname === '/dashboard') {
+    router.push('/dashboard/agent');
+    return null;
+  }
+
+  if (session?.user?.role === 'ADMIN' && router.pathname === '/dashboard') {
+    router.push('/admin');
+    return null;
+  }
 
   const handleSignOut = async () => {
     await signOut({ redirect: false });
@@ -64,7 +49,7 @@ export default function DashboardLayout({ children }) {
         {/* Sidebar - Desktop */}
         <div className="hidden md:flex flex-col w-64 bg-white shadow-md">
           <div className="p-6 border-b">
-            <Link href="/" className="text-2xl font-bold text-blue-600">$ Houses Auction Depot</Link>
+            <Link href="/" className="text-2xl font-bold text-blue-600">BargainAuctions.com</Link>
           </div>
           
           <div className="p-6 border-b">
@@ -85,24 +70,21 @@ export default function DashboardLayout({ children }) {
               <div>
                 <p className="font-medium">{session?.user?.name}</p>
                 <p className="text-sm text-gray-500">{session?.user?.email}</p>
+                {session?.user?.role && (
+                  <p className="text-xs text-blue-600 mt-1 font-medium">
+                    {session.user.role === 'AGENT' 
+                      ? 'Real Estate Agent' 
+                      : session.user.role === 'ADMIN' 
+                        ? 'Administrator' 
+                        : 'User'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
           
           <nav className="flex-1 p-4">
-            <ul className="space-y-1">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-blue-600"
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <DashboardNav />
           </nav>
           
           <div className="p-4 border-t">
@@ -119,7 +101,7 @@ export default function DashboardLayout({ children }) {
         {/* Mobile Header */}
         <div className="md:hidden fixed top-0 left-0 right-0 bg-white shadow-md z-10">
           <div className="flex items-center justify-between p-4">
-            <Link href="/" className="text-xl font-bold text-blue-600">$ Houses Auction Depot</Link>
+            <Link href="/" className="text-xl font-bold text-blue-600">BargainAuctions.com</Link>
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="text-gray-700"
@@ -153,25 +135,21 @@ export default function DashboardLayout({ children }) {
                   <div>
                     <p className="font-medium">{session?.user?.name}</p>
                     <p className="text-xs text-gray-500">{session?.user?.email}</p>
+                    {session?.user?.role && (
+                      <p className="text-xs text-blue-600 mt-1 font-medium">
+                        {session.user.role === 'AGENT' 
+                          ? 'Real Estate Agent' 
+                          : session.user.role === 'ADMIN' 
+                            ? 'Administrator' 
+                            : 'User'}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
               
               <nav className="p-4">
-                <ul className="space-y-1">
-                  {navItems.map((item) => (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-blue-600"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {item.icon}
-                        <span>{item.label}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <DashboardNav />
               </nav>
               
               <div className="p-4 border-t">

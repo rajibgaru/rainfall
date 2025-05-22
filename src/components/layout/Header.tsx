@@ -48,7 +48,7 @@ export default function Header() {
               {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
             <Link href="/" className="flex items-center">
-              <span className="text-2xl font-bold text-blue-600">FlipHouseAuctions.com</span>
+              <span className="text-2xl font-bold text-blue-600">BargainAuctions.com</span>
             </Link>
           </div>
 

@@ -7,23 +7,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// prisma/schema.prisma
+enum Role {
+  USER
+  AGENT
+  ADMIN
+}
+
 model User {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  name          String
-  email         String    @unique
-  password      String?
-  phone         String?
-  avatar        String?
-  role          Role      @default(USER)
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  sessions      Session[]
-  bids          Bid[]
-  auctions      Auction[] @relation("SellerAuctions")
-  watchlist     Watchlist[]
-  notifications Notification[]
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String    @unique
+  password          String?
+  phone             String?
+  avatar            String?
+  role              Role      @default(USER)
+  emailVerified     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Agent/Brokerage specific fields
+  companyName       String?
+  licenseNumber     String?
+  licenseState      String?
+  licenseExpiry     DateTime?
+  businessAddress   String?
+  businessPhone     String?
+  website           String?
+  bio               String?
+  specialties       String[]  @default([])
+  isVerified        Boolean   @default(false)
+  verificationDoc   String?   // URL to uploaded license document
+  
+  // Existing relations
+  accounts          Account[]
+  sessions          Session[]
+  bids              Bid[]
+  auctions          Auction[] @relation("SellerAuctions")
+  watchlist         Watchlist[]
+  notifications     Notification[]
 }
 
 model Account {
@@ -58,6 +80,7 @@ model Auction {
   description      String        @db.String
   images           String[]
   startingBid      Float
+  reservePrice     Float         @default(0)
   currentBid       Float
   incrementAmount  Float         @default(100)
   location         String
@@ -107,10 +130,6 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id])
 }
 
-enum Role {
-  USER
-  ADMIN
-}
 
 enum AuctionStatus {
   UPCOMING

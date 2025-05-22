@@ -1,3 +1,4 @@
+// src/app/register/page.tsx
 'use client'
 
 import { useState } from 'react';
@@ -7,9 +8,13 @@ import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+// Update the schema to include phone validation
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters long'),
   email: z.string().email('Please enter a valid email address'),
+  phone: z.string()
+    .min(10, 'Phone number must be at least 10 digits')
+    .regex(/^[0-9+\s()-]+$/, 'Please enter a valid phone number'), // Basic phone format validation
   password: z.string().min(6, 'Password must be at least 6 characters long'),
   confirmPassword: z.string()
 }).refine(data => data.password === data.confirmPassword, {
@@ -41,6 +46,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           name: data.name,
           email: data.email,
+          phone: data.phone, // Add phone to request body
           password: data.password
         })
       });
@@ -115,6 +121,23 @@ export default function RegisterPage() {
             )}
           </div>
           
+          {/* Add phone number field */}
+          <div className="mb-4">
+            <label htmlFor="phone" className="block text-gray-700 font-medium mb-1">
+              Phone Number
+            </label>
+            <input
+              id="phone"
+              type="tel"
+              {...register('phone')}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your phone number"
+            />
+            {errors.phone && (
+              <p className="text-red-600 text-sm mt-1">{errors.phone.message}</p>
+            )}
+          </div>
+          
           <div className="mb-4">
             <label htmlFor="password" className="block text-gray-700 font-medium mb-1">
               Password
@@ -161,6 +184,16 @@ export default function RegisterPage() {
             Already have an account?{' '}
             <Link href="/login" className="text-blue-600 hover:underline">
               Log in here
+            </Link>
+          </p>
+        </div>
+        
+        {/* Add link to agent registration */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <p className="text-center text-gray-600">
+            Are you a real estate agent or broker?{' '}
+            <Link href="/register/agent" className="text-blue-600 hover:underline font-medium">
+              Register as an Agent
             </Link>
           </p>
         </div>

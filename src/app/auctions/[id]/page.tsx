@@ -1,393 +1,521 @@
-'use client'
+// Fixed src/app/auctions/[id]/page.tsx - with proper object rendering
+'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { Clock, MapPin, User, Calendar, Heart, Share } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowLeft, Heart, Clock, Gavel, MapPin, User, Calendar } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 
-export default function AuctionDetail() {
-  const { id } = useParams();
+export default function AuctionDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { data: session } = useSession();
+  const auctionId = params.id;
+  
   const [auction, setAuction] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bidAmount, setBidAmount] = useState('');
+  const [bidding, setBidding] = useState(false);
+  const [error, setError] = useState(null);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
-  const [activeTab, setActiveTab] = useState('details');
-  const [selectedImage, setSelectedImage] = useState(0);
-  const [bidAmount, setBidAmount] = useState(0);
-  
+
   useEffect(() => {
-    // Simulate API call with timeout
-    const timeout = setTimeout(() => {
-      // Mock data - in a real app, this would be an API call
-      const mockAuction = {
-        id,
-        title: 'Modern Beachfront Property',
-        description: 'A stunning modern beachfront property with panoramic ocean views. This luxurious home features 4 bedrooms, 3.5 bathrooms, an open-concept living area, gourmet kitchen, and direct beach access. Perfect for those seeking a waterfront lifestyle or a premium vacation property.',
-        location: 'Malibu, California',
-        startingBid: 350000,
-        currentBid: 450000,
-        incrementAmount: 5000,
-        endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3), // 3 days from now
-        startDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
-        bids: 12,
-        featured: true,
-        images: [
-          '/images/placeholder.jpg',
-          '/images/placeholder.jpg',
-          '/images/placeholder.jpg',
-          '/images/placeholder.jpg'
-        ],
-        seller: {
-          id: 's1',
-          name: 'John Doe',
-          avatar: null
-        },
-        propertyDetails: {
-          bedrooms: 4,
-          bathrooms: 3.5,
-          squareFeet: 3200,
-          lotSize: '0.5 acres',
-          yearBuilt: 2015,
-          propertyType: 'Single Family Home',
-          parking: '2-Car Garage'
-        },
-        status: 'LIVE'
-      };
-      
-      setAuction(mockAuction);
-      setBidAmount(mockAuction.currentBid + mockAuction.incrementAmount);
-      setLoading(false);
-    }, 1000);
+    if (!auctionId) return;
 
-    return () => clearTimeout(timeout);
-  }, [id]);
+    const fetchAuction = async () => {
+      try {
+        setLoading(true);
+        console.log('🔍 Fetching auction detail:', auctionId);
 
-  const toggleWatchlist = () => {
-    setIsWatchlisted(!isWatchlisted);
-    // In a real app, you'd call an API to update the watchlist
+        const response = await fetch(`/api/auctions/${auctionId}`);
+        
+        if (response.status === 404) {
+          setError('Auction not found');
+          return;
+        }
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch auction: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('📊 Fetched auction detail:', data.auction);
+        
+        // Ensure we have valid data
+        if (!data.auction) {
+          throw new Error('No auction data received');
+        }
+        
+        setAuction(data.auction);
+        
+        // Set minimum bid amount safely
+        if (data.auction.currentBid && data.auction.incrementAmount) {
+          const minBid = data.auction.currentBid + data.auction.incrementAmount;
+          setBidAmount(minBid.toString());
+        } else {
+          setBidAmount((data.auction.startingBid || 0).toString());
+        }
+        
+      } catch (error) {
+        console.error('❌ Error fetching auction:', error);
+        setError(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAuction();
+  }, [auctionId]);
+
+  const getCurrentStatus = () => {
+    if (!auction?.startDate || !auction?.endDate) {
+      return auction?.status || 'UNKNOWN';
+    }
+    
+    const now = new Date();
+    const startDate = new Date(auction.startDate);
+    const endDate = new Date(auction.endDate);
+    
+    if (auction.status === 'CANCELLED') return 'CANCELLED';
+    if (now < startDate) return 'UPCOMING';
+    if (now >= startDate && now < endDate) return 'LIVE';
+    return 'ENDED';
   };
 
-  const handleBidSubmit = (e) => {
+  const currentStatus = auction ? getCurrentStatus() : 'UNKNOWN';
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'UPCOMING':
+        return 'bg-blue-500 text-white';
+      case 'LIVE':
+        return 'bg-green-500 text-white animate-pulse';
+      case 'ENDED':
+        return 'bg-yellow-500 text-white';
+      case 'CANCELLED':
+        return 'bg-red-500 text-white';
+      default:
+        return 'bg-gray-500 text-white';
+    }
+  };
+
+  const handleBid = async (e) => {
     e.preventDefault();
-    // In a real app, you'd call an API to place a bid
-    alert(`Bid placed: $${bidAmount.toLocaleString()}`);
+    
+    if (!session) {
+      alert('Please sign in to place a bid');
+      router.push('/auth/signin');
+      return;
+    }
+    
+    setBidding(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`/api/auctions/${auctionId}/bid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: parseFloat(bidAmount)
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to place bid');
+      }
+      
+      console.log('✅ Bid placed successfully:', data);
+      
+      // Create the new bid object
+      const newBid = {
+        id: data.bid?.id || Date.now().toString(), // Use bid ID from response or timestamp
+        amount: parseFloat(bidAmount),
+        createdAt: new Date().toISOString(),
+        auctionId: auctionId,
+        bidderId: session.user.id,
+        bidder: {
+          name: session.user.name || 'You'
+        }
+      };
+      
+      // Update auction with new bid and add to bids array
+      setAuction(prev => ({
+        ...prev,
+        currentBid: parseFloat(bidAmount),
+        // Add new bid to the beginning of the bids array
+        bids: [newBid, ...(prev.bids || [])].slice(0, 10) // Keep only the 10 most recent bids
+      }));
+      
+      // Set next minimum bid
+      const nextMinBid = parseFloat(bidAmount) + auction.incrementAmount;
+      setBidAmount(nextMinBid.toString());
+      
+      alert('Bid placed successfully!');
+      
+    } catch (error) {
+      console.error('❌ Error placing bid:', error);
+      setError(error.message);
+    } finally {
+      setBidding(false);
+    }
+  };
+
+  const handleWatchlist = async () => {
+    if (!session) {
+      alert('Please sign in to add to watchlist');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/auctions/${auctionId}/watchlist`, {
+        method: isWatchlisted ? 'DELETE' : 'POST'
+      });
+      
+      if (response.ok) {
+        setIsWatchlisted(!isWatchlisted);
+      }
+    } catch (error) {
+      console.error('Error updating watchlist:', error);
+    }
+  };
+
+  const formattedTimeLeft = () => {
+    if (!auction?.startDate || !auction?.endDate) {
+      return 'Time unknown';
+    }
+    
+    const startDate = new Date(auction.startDate);
+    const endDate = new Date(auction.endDate);
+    
+    if (currentStatus === 'ENDED') {
+      return 'Auction ended';
+    } else if (currentStatus === 'UPCOMING') {
+      return `Starts ${formatDistanceToNow(startDate, { addSuffix: true })}`;
+    } else if (currentStatus === 'LIVE') {
+      return `Ends ${formatDistanceToNow(endDate, { addSuffix: true })}`;
+    } else if (currentStatus === 'CANCELLED') {
+      return 'Auction cancelled';
+    }
+    
+    return 'Unknown';
   };
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-              <div className="bg-gray-200 aspect-video rounded-lg mb-6"></div>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
-                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-              </div>
-            </div>
-            <div>
-              <div className="bg-white rounded-lg shadow-md p-6 animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
-                <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/3 mb-6"></div>
-                <div className="h-20 bg-gray-200 rounded mb-6"></div>
-                <div className="h-10 bg-gray-200 rounded"></div>
-              </div>
-            </div>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         </div>
       </div>
     );
   }
 
-  if (!auction) {
+  if (error || !auction) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Auction Not Found</h2>
-          <p className="text-gray-600">
-            The auction you're looking for doesn't exist or has been removed.
-          </p>
-          <Link href="/auctions" className="text-blue-600 hover:underline mt-4 inline-block">
-            Browse all auctions
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <Link href="/auctions" className="inline-flex items-center text-blue-600 hover:underline mb-4">
+            <ArrowLeft size={16} className="mr-2" />
+            Back to Auctions
           </Link>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error || 'Auction not found'}
+          </div>
         </div>
       </div>
     );
   }
-  
-  const isAuctionLive = new Date(auction.startDate) <= new Date() && new Date(auction.endDate) > new Date();
-  const isAuctionEnded = new Date(auction.endDate) < new Date();
+
+  const minBid = (auction.currentBid || auction.startingBid || 0) + (auction.incrementAmount || 100);
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Images */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-            <div className="relative aspect-video">
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/auctions" className="inline-flex items-center text-blue-600 hover:underline">
+            <ArrowLeft size={16} className="mr-2" />
+            Back to Auctions
+          </Link>
+          
+          <button
+            onClick={handleWatchlist}
+            className={`flex items-center px-4 py-2 rounded-lg border ${
+              isWatchlisted 
+                ? 'bg-red-50 border-red-200 text-red-700' 
+                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Heart size={16} className={`mr-2 ${isWatchlisted ? 'fill-red-500 text-red-500' : ''}`} />
+            {isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Images and Details */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Main Image */}
+            <div className="relative h-96 rounded-lg overflow-hidden bg-gray-200">
               <Image
-                src={auction.images[selectedImage] || '/images/placeholder.jpg'}
-                alt={auction.title}
+                src={auction.images?.[0] || '/images/placeholder.jpg'}
+                alt={auction.title || 'Property'}
                 fill
                 className="object-cover"
               />
-            </div>
-            
-            {auction.images.length > 1 && (
-              <div className="p-4 flex space-x-2 overflow-x-auto">
-                {auction.images.map((image, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedImage(index)}
-                    className={`relative w-20 h-20 rounded overflow-hidden ${
-                      selectedImage === index ? 'ring-2 ring-blue-600' : ''
-                    }`}
-                  >
-                    <Image
-                      src={image}
-                      alt={`${auction.title} - Image ${index + 1}`}
-                      fill
-                      className="object-cover"
-                    />
-                  </button>
-                ))}
+              
+              {/* Status Badge */}
+              <div className="absolute top-4 right-4">
+                <span className={`px-3 py-1 rounded text-sm font-bold ${getStatusColor(currentStatus)}`}>
+                  {currentStatus}
+                </span>
               </div>
-            )}
-          </div>
-          
-          {/* Tabs Navigation */}
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="flex border-b">
-              <button
-                className={`px-4 py-3 font-medium ${
-                  activeTab === 'details'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600'
-                }`}
-                onClick={() => setActiveTab('details')}
-              >
-                Details
-              </button>
-              <button
-                className={`px-4 py-3 font-medium ${
-                  activeTab === 'bidHistory'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600'
-                }`}
-                onClick={() => setActiveTab('bidHistory')}
-              >
-                Bid History
-              </button>
+              
+              {/* Debug overlay */}
+              <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded">
+                <div>DB Status: {auction.status || 'Unknown'}</div>
+                <div>Calculated: {currentStatus}</div>
+              </div>
             </div>
-            
-            <div className="p-6">
-              {activeTab === 'details' ? (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">Property Details</h2>
-                  <p className="text-gray-700 mb-6">{auction.description}</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div className="flex items-start space-x-2">
-                      <MapPin className="text-gray-500 mt-1" size={18} />
-                      <div>
-                        <p className="font-medium">Location</p>
-                        <p className="text-gray-600">{auction.location}</p>
+
+            {/* Property Information */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h1 className="text-3xl font-bold mb-4">{auction.title || 'Property Auction'}</h1>
+              
+              <div className="flex items-center text-gray-600 mb-4">
+                <MapPin size={16} className="mr-2" />
+                <span>{auction.location || 'Location not specified'}</span>
+              </div>
+              
+              <div className="flex items-center text-gray-600 mb-6">
+                <Clock size={16} className="mr-2" />
+                <span>{formattedTimeLeft()}</span>
+              </div>
+              
+              <div className="prose max-w-none">
+                <h3 className="text-lg font-semibold mb-2">Description</h3>
+                <p className="text-gray-700 leading-relaxed">
+                  {auction.description || 'No description available'}
+                </p>
+              </div>
+            </div>
+
+            {/* Property Details */}
+            {auction.propertyDetails && typeof auction.propertyDetails === 'object' && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <h3 className="text-lg font-semibold mb-4">Property Details</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {auction.propertyDetails.beds && (
+                    <div className="text-center p-3 bg-gray-50 rounded">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {auction.propertyDetails.beds}
                       </div>
+                      <div className="text-sm text-gray-600">Bedrooms</div>
                     </div>
-                    <div className="flex items-start space-x-2">
-                      <User className="text-gray-500 mt-1" size={18} />
-                      <div>
-                        <p className="font-medium">Seller</p>
-                        <p className="text-gray-600">{auction.seller.name}</p>
+                  )}
+                  {auction.propertyDetails.baths && (
+                    <div className="text-center p-3 bg-gray-50 rounded">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {auction.propertyDetails.baths}
                       </div>
+                      <div className="text-sm text-gray-600">Bathrooms</div>
                     </div>
-                    <div className="flex items-start space-x-2">
-                      <Calendar className="text-gray-500 mt-1" size={18} />
-                      <div>
-                        <p className="font-medium">Start Date</p>
-                        <p className="text-gray-600">
-                          {format(new Date(auction.startDate), 'PPP')}
-                        </p>
+                  )}
+                  {auction.propertyDetails.sqft && (
+                    <div className="text-center p-3 bg-gray-50 rounded">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {Number(auction.propertyDetails.sqft).toLocaleString()}
                       </div>
+                      <div className="text-sm text-gray-600">Sq Ft</div>
                     </div>
-                    <div className="flex items-start space-x-2">
-                      <Calendar className="text-gray-500 mt-1" size={18} />
-                      <div>
-                        <p className="font-medium">End Date</p>
-                        <p className="text-gray-600">
-                          {format(new Date(auction.endDate), 'PPP')}
-                        </p>
+                  )}
+                  {auction.propertyDetails.yearBuilt && (
+                    <div className="text-center p-3 bg-gray-50 rounded">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {auction.propertyDetails.yearBuilt}
                       </div>
-                    </div>
-                  </div>
-                  
-                  {/* Property Specifications */}
-                  {auction.propertyDetails && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3">Property Specifications</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {Object.entries(auction.propertyDetails).map(([key, value]) => (
-                          <div key={key} className="bg-gray-50 p-3 rounded">
-                            <p className="text-sm text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                            <p className="font-medium">{value}</p>
-                          </div>
-                        ))}
-                      </div>
+                      <div className="text-sm text-gray-600">Year Built</div>
                     </div>
                   )}
                 </div>
-              ) : (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">Bid History</h2>
-                  <div className="text-center py-4">
-                    <p className="text-gray-500">No bid history available</p>
+              </div>
+            )}
+
+            {/* Recent Bids */}
+            {auction.bids && Array.isArray(auction.bids) && auction.bids.length > 0 && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <h3 className="text-lg font-semibold mb-4">Recent Bids</h3>
+                <div className="space-y-3">
+                  {auction.bids.slice(0, 5).map((bid, index) => (
+                    <div key={bid.id || index} className={`flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0 ${
+                      bid.bidderId === session?.user?.id ? 'bg-green-50 px-2 rounded' : ''
+                    }`}>
+                      <div className="flex items-center">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                          bid.bidderId === session?.user?.id ? 'bg-green-200' : 'bg-gray-200'
+                        }`}>
+                          <User size={16} className={`${
+                            bid.bidderId === session?.user?.id ? 'text-green-600' : 'text-gray-500'
+                          }`} />
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            {bid.bidderId === session?.user?.id ? 'You' : (bid.bidder?.name || 'Anonymous Bidder')}
+                            {index === 0 && (
+                              <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                                Highest Bid
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {bid.createdAt ? new Date(bid.createdAt).toLocaleString() : 'Just now'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`text-lg font-bold ${
+                        bid.bidderId === session?.user?.id ? 'text-green-600' : 'text-blue-600'
+                      }`}>
+                        ${Number(bid.amount).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Show message when no bids yet */}
+                {auction.bids.length === 0 && (
+                  <div className="text-center py-6 text-gray-500">
+                    <Gavel size={24} className="mx-auto mb-2 opacity-50" />
+                    <p>No bids placed yet. Be the first to bid!</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Bidding */}
+          <div className="space-y-6">
+            {/* Current Bid */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-lg font-semibold mb-4">Current Bid</h2>
+              
+                <div className="text-center mb-6">
+                <div className="text-4xl font-bold text-blue-600 mb-2">
+                  ${Number(auction.currentBid || auction.startingBid || 0).toLocaleString()}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {Array.isArray(auction.bids) ? auction.bids.length : 0} bids placed
+                </div>
+                {/* Show if this is your bid */}
+                {Array.isArray(auction.bids) && auction.bids.length > 0 && 
+                 auction.bids[0].bidderId === session?.user?.id && (
+                  <div className="text-xs text-green-600 mt-1">
+                    You are the highest bidder!
+                  </div>
+                )}
+              </div>
+
+              {/* Reserve Price Info */}
+              {auction.reservePrice > 0 && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <div className="text-sm">
+                    <span className="font-medium">Reserve Price:</span> ${Number(auction.reservePrice).toLocaleString()}
+                    <div className="text-xs text-gray-600 mt-1">
+                      {(auction.currentBid || 0) >= auction.reservePrice ? '✅ Reserve met' : '⚠️ Reserve not yet met'}
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-        
-        {/* Right Column - Bidding Info */}
-        <div>
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h1 className="text-2xl font-bold">{auction.title}</h1>
-              <div className="flex space-x-2">
-                <button
-                  onClick={toggleWatchlist}
-                  className={`p-2 rounded-full ${
-                    isWatchlisted ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  <Heart
-                    size={20}
-                    className={isWatchlisted ? 'fill-red-500' : ''}
-                  />
-                </button>
-                <button className="p-2 rounded-full bg-gray-100 text-gray-600">
-                  <Share size={20} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="mb-6">
-              <p className="text-sm text-gray-500 mb-1">Current Bid</p>
-              <p className="text-3xl font-bold text-blue-600">
-                ${auction.currentBid.toLocaleString()}
-              </p>
-              <p className="text-sm text-gray-600">
-                {auction.bids || 0} bids
-              </p>
-            </div>
-            
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-              <div className="flex items-center text-blue-800 mb-2">
-                <Clock size={18} className="mr-2" />
-                <p className="font-medium">
-                  {isAuctionEnded
-                    ? 'Auction has ended'
-                    : !isAuctionLive
-                    ? 'Auction starts ' +
-                      formatDistanceToNow(new Date(auction.startDate), { addSuffix: true })
-                    : 'Auction ends ' +
-                      formatDistanceToNow(new Date(auction.endDate), { addSuffix: true })}
-                </p>
-              </div>
-              <p className="text-sm text-blue-700">
-                {isAuctionEnded
-                  ? 'This auction has concluded'
-                  : !isAuctionLive
-                  ? `Bidding will open on ${format(
-                      new Date(auction.startDate),
-                      'PPp'
-                    )}`
-                  : `Bidding will close on ${format(
-                      new Date(auction.endDate),
-                      'PPp'
-                    )}`}
-              </p>
-            </div>
-            
-            {isAuctionLive ? (
-              <div>
-                <form onSubmit={handleBidSubmit}>
-                  <div className="mb-4">
-                    <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                      Your Bid Amount
+
+              {/* Bidding Form */}
+              {currentStatus === 'LIVE' && session ? (
+                <form onSubmit={handleBid} className="space-y-4">
+                  <div>
+                    <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-2">
+                      Your Bid (minimum: ${Number(minBid).toLocaleString()})
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-gray-500">$</span>
+                      <span className="absolute left-3 top-3 text-gray-500">$</span>
                       <input
                         type="number"
                         id="bidAmount"
                         value={bidAmount}
-                        onChange={(e) => setBidAmount(parseFloat(e.target.value))}
-                        min={auction.currentBid + auction.incrementAmount}
-                        step={auction.incrementAmount}
-                        className="w-full pl-8 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => setBidAmount(e.target.value)}
+                        min={minBid}
+                        step="100"
+                        className="w-full pl-8 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Minimum bid: ${(auction.currentBid + auction.incrementAmount).toLocaleString()}
-                    </p>
                   </div>
+                  
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                      {error}
+                    </div>
+                  )}
                   
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 text-white font-medium py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={bidding || parseFloat(bidAmount) < minBid}
+                    className="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-400 flex items-center justify-center"
                   >
-                    Place Bid
+                    <Gavel size={20} className="mr-2" />
+                    {bidding ? 'Placing Bid...' : 'Place Bid'}
                   </button>
                 </form>
-              </div>
-            ) : isAuctionEnded ? (
-              <div className="bg-gray-100 p-4 rounded-lg text-center">
-                <p className="text-gray-700 font-medium">
-                  This auction has ended
-                </p>
-                <p className="text-sm text-gray-600 mt-1">
-                  Winning bid: ${auction.currentBid.toLocaleString()}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-gray-100 p-4 rounded-lg text-center">
-                <p className="text-gray-700 font-medium">
-                  Bidding hasn't started yet
-                </p>
-                <p className="text-sm text-gray-600 mt-1">
-                  Starting bid: ${auction.startingBid.toLocaleString()}
-                </p>
+              ) : currentStatus === 'LIVE' && !session ? (
+                <div className="text-center py-4">
+                  <p className="text-gray-600 mb-4">Sign in to place a bid</p>
+                  <Link 
+                    href="/auth/signin"
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-block"
+                  >
+                    Sign In to Bid
+                  </Link>
+                </div>
+              ) : currentStatus === 'UPCOMING' ? (
+                <div className="text-center py-4 bg-blue-50 rounded-lg">
+                  <Clock size={24} className="mx-auto mb-2 text-blue-600" />
+                  <p className="text-blue-800 font-medium">Auction Starting Soon</p>
+                  <p className="text-blue-600 text-sm">{formattedTimeLeft()}</p>
+                </div>
+              ) : (
+                <div className="text-center py-4 bg-gray-50 rounded-lg">
+                  <p className="text-gray-600 font-medium">Auction Has Ended</p>
+                  {currentStatus === 'ENDED' && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Final bid: ${Number(auction.currentBid || 0).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Seller Information */}
+            {auction.seller && typeof auction.seller === 'object' && (
+              <div className="bg-white rounded-lg p-6 shadow-sm">
+                <h3 className="text-lg font-semibold mb-4">Listed By</h3>
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mr-4">
+                    <User size={20} className="text-gray-500" />
+                  </div>
+                  <div>
+                    <div className="font-medium">{auction.seller.name || 'Unknown Seller'}</div>
+                    {auction.seller.companyName && (
+                      <div className="text-sm text-gray-600">{auction.seller.companyName}</div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
-            
-            <div className="mt-6">
-              <h3 className="font-semibold mb-2">Quick Information</h3>
-              <ul className="space-y-2 text-sm text-gray-700">
-                <li>• Minimum bid increment: ${auction.incrementAmount.toLocaleString()}</li>
-                <li>• All bids are binding and cannot be retracted</li>
-                <li>• Winner will be contacted via email</li>
-                <li>
-                  • Questions?{' '}
-                  <Link href="/contact" className="text-blue-600 hover:underline">
-                    Contact support
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-          
-          {/* Similar Auctions */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="font-semibold mb-4">Similar Properties</h3>
-            <p className="text-gray-500 text-sm">
-              More properties like this coming soon...
-            </p>
           </div>
         </div>
       </div>

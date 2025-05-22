@@ -1,10 +1,12 @@
+// src/app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request) {
   try {
-    const { name, email, password } = await request.json();
+    // Extract all fields including phone
+    const { name, email, phone, password } = await request.json();
     
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -18,29 +20,43 @@ export async function POST(request) {
       );
     }
     
+    // Validate phone number (basic validation)
+    if (!phone || phone.length < 10) {
+      return NextResponse.json(
+        { error: "Please provide a valid phone number" },
+        { status: 400 }
+      );
+    }
+    
     // Hash password
     const hashedPassword = await hash(password, 10);
     
-    // Create new user
+    // Create new user with phone number
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password: hashedPassword
+        phone, // Add phone to user data
+        password: hashedPassword,
+        role: "USER"
       }
     });
     
+    // Return success response
     return NextResponse.json(
       { 
         message: "User registered successfully",
         user: {
           id: user.id,
           name: user.name,
-          email: user.email
+          email: user.email,
+          phone: user.phone
         }
       }
     );
   } catch (error) {
+    console.error("Registration error:", error);
+    
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }

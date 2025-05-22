@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="container mx-auto px-4 max-w-6xl">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="text-xl font-bold mb-4">FlipHouseAuctions.com</h3>
+            <h3 className="text-xl font-bold mb-4">BargainAuctions.com</h3>
             <p className="text-gray-400 mb-4">
               Transforming real estate transactions with our cutting-edge auction platform.
             </p>
@@ -54,7 +54,7 @@ export default function Footer() {
         </div>
         
         <div className="border-t border-gray-700 mt-8 pt-8 text-center">
-          <p className="text-gray-400">© {new Date().getFullYear()} FlipHouseAuctions.com. All rights reserved.</p>
+          <p className="text-gray-400">© {new Date().getFullYear()} BargainAuctions.com. All rights reserved.</p>
         </div>
       </div>
     </footer>
