@@ -1,7 +1,6 @@
-// src/app/auctions/create/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,13 +8,16 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
+// Updated schema with minimum escrow requirement
 const auctionSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
   description: z.string().min(20, 'Description must be at least 20 characters'),
   startingBid: z.coerce.number().positive('Starting bid must be greater than 0'),
   reservePrice: z.coerce.number().nonnegative('Reserve price must be a non-negative number'),
   incrementAmount: z.coerce.number().positive('Increment amount must be greater than 0'),
-  location: z.string().min(3, 'Location is required'),
+  minimumEscrow: z.coerce.number().positive('Minimum escrow amount must be greater than 0'),
+  city: z.string().min(2, 'City is required'),
+  state: z.string().min(2, 'State is required'),
   category: z.string().min(1, 'Category is required'),
   startDate: z.string().refine(date => new Date(date) > new Date(), {
     message: 'Start date must be in the future'
@@ -23,7 +25,7 @@ const auctionSchema = z.object({
   endDate: z.string().refine(date => new Date(date) > new Date(), {
     message: 'End date must be in the future'
   }),
-  // Add new property detail fields to the schema
+  // Property detail fields
   bedrooms: z.coerce.number().int().min(0, 'Bedrooms must be a non-negative number'),
   bathrooms: z.coerce.number().min(0, 'Bathrooms must be a non-negative number'),
   sqft: z.coerce.number().int().positive('Square footage must be greater than 0'),
@@ -39,6 +41,9 @@ const auctionSchema = z.object({
 }).refine(data => data.reservePrice >= data.startingBid, {
   message: "Reserve price must be equal to or greater than the starting bid",
   path: ['reservePrice']
+}).refine(data => data.minimumEscrow >= 1000, {
+  message: "Minimum escrow must be at least $1,000",
+  path: ['minimumEscrow']
 });
 
 type AuctionFormValues = z.infer<typeof auctionSchema>;
@@ -62,12 +67,13 @@ export default function CreateAuctionPage() {
     defaultValues: {
       category: '',
       incrementAmount: 100,
+      minimumEscrow: 5000, // Default $5k minimum escrow
       propertyType: '',
       bedrooms: 0,
       bathrooms: 0,
       sqft: 0,
-      yearBuilt: new Date().getFullYear() - 10, // Default to 10 years ago
-      reservePrice: 0, // Default to 0 (no reserve)
+      yearBuilt: new Date().getFullYear() - 10,
+      reservePrice: 0,
       features: []
     }
   });
@@ -128,19 +134,22 @@ export default function CreateAuctionPage() {
       
       const uploadedImageUrls = await Promise.all(imageUploadPromises);
       
-      // Property details as JSON with form values instead of hardcoded values
+      // Property details as JSON
       const propertyDetails = {
         beds: data.bedrooms,
         baths: data.bathrooms,
         sqft: data.sqft,
         yearBuilt: data.yearBuilt,
-        lotSize: data.lotSize || '0.25 acres', // Use form value or default
+        lotSize: data.lotSize || '0.25 acres',
         propertyType: data.propertyType,
-        parking: data.parking || 'Garage - 2 cars', // Use form value or default
+        parking: data.parking || 'Garage - 2 cars',
         features: selectedFeatures.length > 0 ? selectedFeatures : ['Central Air', 'Fireplace', 'Hardwood Floors']
       };
       
-      // Create the auction
+      // Combine city and state for the location field
+      const location = `${data.city}, ${data.state}`;
+      
+      // Create the auction with minimum escrow requirement
       const response = await fetch('/api/auctions', {
         method: 'POST',
         headers: {
@@ -150,8 +159,10 @@ export default function CreateAuctionPage() {
           title: data.title,
           description: data.description,
           startingBid: data.startingBid,
+          reservePrice: data.reservePrice,
           incrementAmount: data.incrementAmount,
-          location: data.location,
+          minimumEscrow: data.minimumEscrow, // Add minimum escrow to the request
+          location: location,
           category: data.category,
           startDate: data.startDate,
           endDate: data.endDate,
@@ -199,6 +210,61 @@ export default function CreateAuctionPage() {
     'Land',
     'Industrial',
     'Other'
+  ];
+
+  // US States for dropdown
+  const usStates = [
+    { value: 'AL', label: 'Alabama' },
+    { value: 'AK', label: 'Alaska' },
+    { value: 'AZ', label: 'Arizona' },
+    { value: 'AR', label: 'Arkansas' },
+    { value: 'CA', label: 'California' },
+    { value: 'CO', label: 'Colorado' },
+    { value: 'CT', label: 'Connecticut' },
+    { value: 'DE', label: 'Delaware' },
+    { value: 'FL', label: 'Florida' },
+    { value: 'GA', label: 'Georgia' },
+    { value: 'HI', label: 'Hawaii' },
+    { value: 'ID', label: 'Idaho' },
+    { value: 'IL', label: 'Illinois' },
+    { value: 'IN', label: 'Indiana' },
+    { value: 'IA', label: 'Iowa' },
+    { value: 'KS', label: 'Kansas' },
+    { value: 'KY', label: 'Kentucky' },
+    { value: 'LA', label: 'Louisiana' },
+    { value: 'ME', label: 'Maine' },
+    { value: 'MD', label: 'Maryland' },
+    { value: 'MA', label: 'Massachusetts' },
+    { value: 'MI', label: 'Michigan' },
+    { value: 'MN', label: 'Minnesota' },
+    { value: 'MS', label: 'Mississippi' },
+    { value: 'MO', label: 'Missouri' },
+    { value: 'MT', label: 'Montana' },
+    { value: 'NE', label: 'Nebraska' },
+    { value: 'NV', label: 'Nevada' },
+    { value: 'NH', label: 'New Hampshire' },
+    { value: 'NJ', label: 'New Jersey' },
+    { value: 'NM', label: 'New Mexico' },
+    { value: 'NY', label: 'New York' },
+    { value: 'NC', label: 'North Carolina' },
+    { value: 'ND', label: 'North Dakota' },
+    { value: 'OH', label: 'Ohio' },
+    { value: 'OK', label: 'Oklahoma' },
+    { value: 'OR', label: 'Oregon' },
+    { value: 'PA', label: 'Pennsylvania' },
+    { value: 'RI', label: 'Rhode Island' },
+    { value: 'SC', label: 'South Carolina' },
+    { value: 'SD', label: 'South Dakota' },
+    { value: 'TN', label: 'Tennessee' },
+    { value: 'TX', label: 'Texas' },
+    { value: 'UT', label: 'Utah' },
+    { value: 'VT', label: 'Vermont' },
+    { value: 'VA', label: 'Virginia' },
+    { value: 'WA', label: 'Washington' },
+    { value: 'WV', label: 'West Virginia' },
+    { value: 'WI', label: 'Wisconsin' },
+    { value: 'WY', label: 'Wyoming' },
+    { value: 'DC', label: 'District of Columbia' },
   ];
 
   // Common property features
@@ -274,19 +340,41 @@ export default function CreateAuctionPage() {
                 )}
               </div>
               
+              {/* Separated City and State fields */}
               <div>
-                <label htmlFor="location" className="block text-gray-700 font-medium mb-1">
-                  Location
+                <label htmlFor="city" className="block text-gray-700 font-medium mb-1">
+                  City
                 </label>
                 <input
-                  id="location"
+                  id="city"
                   type="text"
-                  {...register('location')}
+                  {...register('city')}
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="City, State"
+                  placeholder="Enter city"
                 />
-                {errors.location && (
-                  <p className="text-red-600 text-sm mt-1">{errors.location.message}</p>
+                {errors.city && (
+                  <p className="text-red-600 text-sm mt-1">{errors.city.message}</p>
+                )}
+              </div>
+              
+              <div>
+                <label htmlFor="state" className="block text-gray-700 font-medium mb-1">
+                  State
+                </label>
+                <select
+                  id="state"
+                  {...register('state')}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select state</option>
+                  {usStates.map((state) => (
+                    <option key={state.value} value={state.value}>
+                      {state.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.state && (
+                  <p className="text-red-600 text-sm mt-1">{errors.state.message}</p>
                 )}
               </div>
               
@@ -313,7 +401,7 @@ export default function CreateAuctionPage() {
             </div>
           </div>
           
-          {/* Property Details - NEW SECTION */}
+          {/* Property Details */}
           <div className="border-b border-gray-200 pb-6">
             <h2 className="text-lg font-medium mb-4">Property Details</h2>
             
@@ -459,7 +547,7 @@ export default function CreateAuctionPage() {
             </div>
           </div>
           
-          {/* Auction Details */}
+          {/* Auction Details - Updated with Minimum Escrow */}
           <div className="border-b border-gray-200 pb-6">
             <h2 className="text-lg font-medium mb-4">Auction Details</h2>
             
@@ -484,7 +572,7 @@ export default function CreateAuctionPage() {
               
               <div>
                 <label htmlFor="reservePrice" className="block text-gray-700 font-medium mb-1">
-                  Reserve Price ($) <span className="text-sm text-gray-500 font-normal">(Optional)</span>
+                  Reserve Price ($)
                 </label>
                 <input
                   id="reservePrice"
@@ -493,14 +581,34 @@ export default function CreateAuctionPage() {
                   min={watch('startingBid') || 0}
                   {...register('reservePrice')}
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00 (No reserve)"
+                  placeholder="Enter reserve price"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  The minimum price that must be met for the auction to end with a sale.
-                  Set to 0 for no reserve.
+                  The reserve price is the minimum amount you're willing to accept. If bids don't reach this amount, you're not obligated to sell. Leave blank to sell to the highest bidder regardless of amount.
                 </p>
                 {errors.reservePrice && (
                   <p className="text-red-600 text-sm mt-1">{errors.reservePrice.message}</p>
+                )}
+              </div>
+              
+              <div>
+                <label htmlFor="minimumEscrow" className="block text-gray-700 font-medium mb-1">
+                  Minimum Escrow Requirement ($)
+                </label>
+                <input
+                  id="minimumEscrow"
+                  type="number"
+                  step="100"
+                  min="1000"
+                  {...register('minimumEscrow')}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="5000.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  The minimum amount bidders must have in their escrow wallet to participate in this auction.
+                </p>
+                {errors.minimumEscrow && (
+                  <p className="text-red-600 text-sm mt-1">{errors.minimumEscrow.message}</p>
                 )}
               </div>
               

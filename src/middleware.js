@@ -31,6 +31,9 @@ export async function middleware(request) {
   // Define auth routes (login/register)
   const authRoutes = ['/login', '/register', '/register/agent'];
   
+  // Define bid endpoints (restricted for agents)
+  const bidEndpoints = ['/api/auctions', '/api/bids'];
+  
   // Check if path is protected
   const isProtectedPath = protectedRoutes.some(route => 
     pathname === route || pathname.startsWith(`${route}/`)
@@ -48,6 +51,19 @@ export async function middleware(request) {
   
   // Check if path is auth route
   const isAuthPath = authRoutes.some(route => pathname === route);
+  
+  // Check if this is a bid-related endpoint
+  const isBidEndpoint = bidEndpoints.some(endpoint => 
+    pathname.includes(`${endpoint}/`) && pathname.includes('/bid')
+  );
+  
+  // Block agents from bidding on auctions (POST requests to bid endpoints)
+  if (isAuthenticated && isBidEndpoint && request.method === 'POST' && token.role === 'AGENT') {
+    return NextResponse.json(
+      { error: 'As a real estate agent, you cannot place bids on auctions' },
+      { status: 403 }
+    );
+  }
   
   // Already authenticated users should be redirected from auth pages
   if (isAuthenticated && isAuthPath) {
@@ -99,6 +115,7 @@ export const config = {
     '/api/dashboard/:path*',
     '/api/admin/:path*',
     '/api/auctions/:path*/bid',
+    '/api/bids/:path*',
     '/login',
     '/register',
     '/register/agent',

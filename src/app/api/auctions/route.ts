@@ -1,4 +1,4 @@
-// Complete src/app/api/auctions/route.ts file
+// Complete src/app/api/auctions/route.js file
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -50,31 +50,56 @@ export async function POST(request) {
       );
     }
     
-    // Create the auction
-    const auction = await prisma.auction.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        startingBid: parseFloat(data.startingBid),
-        reservePrice: data.reservePrice !== undefined ? parseFloat(data.reservePrice) : 0,
-        currentBid: parseFloat(data.currentBid),
-        incrementAmount: parseFloat(data.incrementAmount),
-        location: data.location,
-        category: data.category,
-        images: data.images || [],
-        status: data.status || 'UPCOMING',
-        featured: data.featured || false,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
-        propertyDetails: data.propertyDetails || {},
-        sellerId: session.user.id
-      }
+    // Validate minimum escrow amount
+    const minimumEscrow = data.minimumEscrow ? parseFloat(data.minimumEscrow) : 5000; // Default to $5k
+    if (minimumEscrow < 1000) {
+      return NextResponse.json(
+        { error: 'Minimum escrow requirement must be at least $1,000' },
+        { status: 400 }
+      );
+    }
+    
+    // Create the auction and bid requirement in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the auction
+      const auction = await tx.auction.create({
+        data: {
+          title: data.title,
+          description: data.description,
+          startingBid: parseFloat(data.startingBid),
+          reservePrice: data.reservePrice !== undefined ? parseFloat(data.reservePrice) : 0,
+          currentBid: parseFloat(data.currentBid),
+          incrementAmount: parseFloat(data.incrementAmount),
+          location: data.location,
+          category: data.category,
+          images: data.images || [],
+          status: data.status || 'UPCOMING',
+          featured: data.featured || false,
+          startDate: new Date(data.startDate),
+          endDate: new Date(data.endDate),
+          propertyDetails: data.propertyDetails || {},
+          sellerId: session.user.id
+        }
+      });
+      
+      // Create the bid requirement with the specified minimum escrow
+      const bidRequirement = await tx.bidRequirement.create({
+        data: {
+          auctionId: auction.id,
+          requiredAmount: minimumEscrow
+        }
+      });
+      
+      return { auction, bidRequirement };
     });
+    
+    console.log(`✅ Created auction "${data.title}" with minimum escrow requirement of $${minimumEscrow.toLocaleString()}`);
     
     return NextResponse.json(
       { 
         message: 'Auction created successfully',
-        auction
+        auction: result.auction,
+        minimumEscrowSet: minimumEscrow
       }
     );
   } catch (error) {
@@ -125,7 +150,7 @@ export async function GET(request) {
       filter.reservePrice = { equals: 0 };
     }
     
-    // Get auctions from database WITH BID COUNT
+    // Get auctions from database WITH BID COUNT and BID REQUIREMENTS
     const auctions = await prisma.auction.findMany({
       where: filter,
       orderBy: {
@@ -140,6 +165,11 @@ export async function GET(request) {
             companyName: true
           }
         },
+        bidRequirement: {
+          select: {
+            requiredAmount: true
+          }
+        },
         _count: {
           select: {
             bids: true  // ✅ This adds the actual bid count from database
@@ -148,7 +178,7 @@ export async function GET(request) {
       }
     });
     
-    console.log(`📊 API: Found ${auctions.length} auctions with bid counts`);
+    console.log(`📊 API: Found ${auctions.length} auctions with bid counts and escrow requirements`);
     
     // Return auctions as-is (let client-side handle status calculation)
     return NextResponse.json({ auctions });

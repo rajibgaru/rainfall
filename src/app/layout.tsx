@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/context/AuthProvider';
+import ToastProvider from '@/components/ui/ToastProvider';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import './globals.css';
@@ -21,6 +22,7 @@ export default function RootLayout({ children }) {
             <main className="flex-grow">{children}</main>
             <Footer />
           </div>
+          <ToastProvider />
         </AuthProvider>
       </body>
     </html>

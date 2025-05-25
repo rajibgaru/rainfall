@@ -46,6 +46,13 @@ model User {
   auctions          Auction[] @relation("SellerAuctions")
   watchlist         Watchlist[]
   notifications     Notification[]
+  
+  // NEW: Escrow relations
+  escrowWallet      EscrowWallet?
+  
+  // NEW: Plaid relations
+  bankAccounts      UserBankAccount[]
+  depositRequests   DepositRequest[]
 }
 
 model Account {
@@ -96,6 +103,10 @@ model Auction {
   seller           User          @relation("SellerAuctions", fields: [sellerId], references: [id])
   bids             Bid[]
   watchlist        Watchlist[]
+  
+  // NEW: Escrow relations
+  bidRequirement   BidRequirement?
+  escrowTransactions EscrowTransaction[]
 }
 
 model Bid {
@@ -106,6 +117,9 @@ model Bid {
   auction   Auction  @relation(fields: [auctionId], references: [id])
   bidderId  String   @db.ObjectId
   bidder    User     @relation(fields: [bidderId], references: [id])
+  
+  // NEW: Escrow relation
+  escrowTransactions EscrowTransaction[]
 }
 
 model Watchlist {
@@ -130,10 +144,136 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id])
 }
 
+// NEW: ESCROW SYSTEM MODELS
+
+model EscrowWallet {
+  id            String              @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String              @db.ObjectId @unique
+  balance       Float               @default(0)
+  frozenAmount  Float               @default(0) // Amount locked for active bids
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  EscrowTransaction[]
+  
+  @@map("escrow_wallets")
+}
+
+model EscrowTransaction {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  walletId      String            @db.ObjectId
+  type          TransactionType
+  amount        Float
+  status        TransactionStatus @default(PENDING)
+  reference     String?           // Wire transfer ref, check number, etc.
+  description   String
+  processedBy   String?           @db.ObjectId // Admin who processed
+  createdAt     DateTime          @default(now())
+  processedAt   DateTime?
+  
+  // For bid-related transactions
+  auctionId     String?           @db.ObjectId
+  bidId         String?           @db.ObjectId
+  
+  // Relations
+  wallet        EscrowWallet      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  auction       Auction?          @relation(fields: [auctionId], references: [id])
+  bid           Bid?              @relation(fields: [bidId], references: [id])
+  
+  @@map("escrow_transactions")
+}
+
+model BidRequirement {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  auctionId     String    @db.ObjectId @unique
+  requiredAmount Float    @default(5000) // Minimum escrow needed to bid
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  auction       Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  
+  @@map("bid_requirements")
+}
+
+// NEW: PLAID INTEGRATION MODELS
+
+model UserBankAccount {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @db.ObjectId
+  plaidAccessToken  String    // TODO: Encrypt in production
+  plaidItemId       String
+  accountId         String    // Plaid's account ID
+  accountName       String
+  accountType       String    // checking, savings, etc.
+  accountSubtype    String?
+  mask              String    // Last 4 digits
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  depositRequests   DepositRequest[]
+  
+  @@map("user_bank_accounts")
+}
+
+model DepositRequest {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String            @db.ObjectId
+  bankAccountId   String?           @db.ObjectId // For ACH transfers
+  amount          Float
+  method          DepositMethod     @default(MANUAL)
+  status          DepositStatus     @default(PENDING)
+  reference       String            @unique
+  plaidTransferId String?           // For ACH transfers via Plaid
+  instructions    Json?             // Deposit instructions for manual methods
+  errorMessage    String?           // Error details if failed
+  createdAt       DateTime          @default(now())
+  processedAt     DateTime?
+  
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount     UserBankAccount?  @relation(fields: [bankAccountId], references: [id])
+  
+  @@map("deposit_requests")
+}
+
+// ENUMS
 
 enum AuctionStatus {
   UPCOMING
   LIVE
   ENDED
   CANCELLED
+}
+
+enum TransactionType {
+  DEPOSIT       // Money coming in
+  WITHDRAWAL    // Money going out
+  BID_FREEZE    // Freeze for active bid (future use)
+  BID_UNFREEZE  // Release frozen amount (future use)
+  PURCHASE      // Applied to winning purchase
+  REFUND        // Admin refund
+  ADJUSTMENT    // Admin balance adjustment
+}
+
+enum TransactionStatus {
+  PENDING       // Awaiting processing
+  COMPLETED     // Successfully processed  
+  FAILED        // Transaction failed
+  CANCELLED     // Transaction cancelled
+}
+
+enum DepositMethod {
+  MANUAL        // Wire/Check/Zelle (manual processing)
+  ACH           // ACH via Plaid
+  PLAID_TRANSFER // Direct Plaid transfer
+}
+
+enum DepositStatus {
+  PENDING       // Awaiting processing
+  PROCESSING    // In progress (ACH processing)
+  COMPLETED     // Successfully processed
+  FAILED        // Failed to process
+  CANCELLED     // Cancelled by user or admin
 }
